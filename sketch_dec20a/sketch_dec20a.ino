@@ -1,5 +1,6 @@
 /* Proyecto PST
  *  Termometro a distancia con alarma
+ *  USB Host Shield
 */
 //Librerias
 #include <Wire.h> //comms
@@ -8,11 +9,21 @@
 #include <DS3231.h> //Reloj
 #include <SR04.h> //Ultrasonico
 #include "pitches.h" //Buzzer
+////////Librerias para lector de Barras
+#include <hid.h> // Agregar el código Oleg Mazurov al lector de códigos de barras
+#include <hiduniversal.h> // Agregar el código Oleg Mazurov al lector de códigos de barras
+#include <usbhub.h>
+#include <avr / pgmspace.h>
+#include <Usb.h>
+#include <usbhub.h>
+#include <avr / pgmspace.h>
+#include <hidboot.h>
+
 
 // Asignacion de pines
-#define Echo 11 //Echo del Ultrasonico
-#define Trig 12 //Trig del Ultrasonico
-#define LP 13 //Salida LED
+#define Echo 6 //Echo del Ultrasonico
+#define Trig 7 //Trig del Ultrasonico
+#define LP 5 //Salida LED
 
 // Inicializaciones
 Adafruit_MLX90614 mlx = Adafruit_MLX90614(); //Sensor Termico
@@ -47,6 +58,47 @@ float TempMax=37.00; //Temperatura maxima permitida
 int TpoAlarma=200; //Tiempo de Alarma por alta temperatura
 
 
+//Funcinoamiento de Lector de barra
+USB USB;
+HIDUniversal Hid (y Usb); // Agrega esta línea para que se reconozca el escáner de código de barras, yo uso "Hid" debajo
+HIDBoot <HID_PROTOCOL_KEYBOARD> Teclado (y Usb);
+
+clase KbdRptParser: público KeyboardReportParser
+{
+PrintKey vacío (mod uint8_t, clave uint8_t); // Agrega esta línea para imprimir el carácter en ASCII
+protegido:
+OnKeyDown vacío virtual (mod uint8_t, clave uint8_t);
+virtual vacío OnKeyPressed (clave uint8_t);
+};
+
+void KbdRptParser :: OnKeyDown (uint8_t mod, uint8_t clave)
+{
+  uint8_t c = OemToAscii (mod, clave);
+  si (c)
+  OnKeyPressed (c);
+}
+
+/ * qué hacer cuando llega el símbolo * /
+void KbdRptParser :: OnKeyPressed (clave uint8_t)
+{
+  if (clave! = 19) Serial.print (clave (char));
+  más Serial.print ((char) 0x0D);
+};
+KbdRptParser Prs;
+
+configuración vacía ()
+{
+  Serial.begin (9600); 
+  if (Usb.Init () == - 1) Serial.println ("OSC no se inició");
+  else Serial.println ("Código de barras listo");
+  Hid.SetReportParser (0, (HIDReportParser *) & Prs); // Cambiar "Teclado" por "Oculto"
+}
+
+bucle vacío ()
+{
+  Usb.Task ();
+}
+
 void setup() 
 {
   pinMode(LP,OUTPUT); //LED
@@ -56,7 +108,7 @@ void setup()
   //clock.setDateTime(2020,7,9,20,19,0); //Quitar comentaro y ajustar a la hora deseada en primer run.
 
   //Sonido inicial
-  tone(10,NOTE_C5,3000);
+  tone(4,NOTE_C5,3000);
   digitalWrite(LP,HIGH);
   delay(3000);
   digitalWrite(LP,LOW);
@@ -99,11 +151,11 @@ if(Presente==1)
 lcd.setCursor(12,3);
 //Temperaturas
 lcd.setCursor(4,1);
-lcd.print(mlx.readAmbientTempC());
+lcd.print(mlx.readAmbientTempC()); //imprime el valor de la temperatura en el lcd
 lcd.setCursor(9,1);
 lcd.print("c");
 
-TempObj=mlx.readObjectTempC();
+TempObj=mlx.readObjectTempC(); //Actualiza el valor de temperatura
 switch(Presente)
 {
   case 0: //No hay nadie
@@ -118,7 +170,7 @@ switch(Presente)
   lcd.print("--.--c");
   lcd.setCursor(0,3);
   lcd.print("LEYENDO...");
-  tone(10,NOTE_C5,TpoAlarma);
+  tone(4,NOTE_C5,TpoAlarma);
   break;
 
   case 2: //Se Completo el tiempo
@@ -128,7 +180,7 @@ switch(Presente)
   lcd.print("c");
   if(TempObj>TempMax)
   {
-    tone(10,NOTE_G5,TpoAlarma);
+    tone(10,NOTE_G5,TpoAlarma); //suena la alarma
    lcd.setCursor(0,3);
    lcd.print("TEMP ALTA!!!");
    digitalWrite(LP,HIGH);
